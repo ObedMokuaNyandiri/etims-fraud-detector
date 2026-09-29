@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  fraud-detector:
+    build: .
+    container_name: etims-fraud-detector
+    ports:
+      - "8000:8000"
+    volumes:
+      - etims-data:/app/data
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+
+volumes:
+  etims-data:
