@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eTIMS Knowledge Graph Engine — VAT Ring Fraud Detection</title>
+    <meta name="description" content="Detect circular VAT ring fraud in Kenya's eTIMS invoice ecosystem using graph theory and network analysis.">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- ─── Sidebar Navigation ─────────────────────────────────────────── -->
+    <nav id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <circle cx="14" cy="14" r="12" stroke="url(#logoGrad)" stroke-width="2.5" fill="none"/>
+                        <circle cx="8" cy="11" r="2.5" fill="#06d6a0"/>
+                        <circle cx="20" cy="11" r="2.5" fill="#ef476f"/>
+                        <circle cx="14" cy="20" r="2.5" fill="#ffd166"/>
+                        <line x1="8" y1="11" x2="20" y2="11" stroke="#4cc9f0" stroke-width="1.5" opacity="0.6"/>
+                        <line x1="20" y1="11" x2="14" y2="20" stroke="#4cc9f0" stroke-width="1.5" opacity="0.6"/>
+                        <line x1="14" y1="20" x2="8" y2="11" stroke="#4cc9f0" stroke-width="1.5" opacity="0.6"/>
+                        <defs><linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
+                            <stop offset="0%" stop-color="#4cc9f0"/><stop offset="100%" stop-color="#7209b7"/>
+                        </linearGradient></defs>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <span class="logo-title">eTIMS</span>
+                    <span class="logo-subtitle">Knowledge Graph</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="nav-links">
+            <a href="#" class="nav-link active" data-page="dashboard" id="nav-dashboard">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="4" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="4" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="8" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-link" data-page="graph" id="nav-graph">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="5" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="15" r="2.5" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="7" x2="10" y2="13" stroke="currentColor" stroke-width="1.5"/><line x1="15" y1="7" x2="10" y2="13" stroke="currentColor" stroke-width="1.5"/><line x1="7" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5"/></svg>
+                <span>Graph Explorer</span>
+            </a>
+            <a href="#" class="nav-link" data-page="rings" id="nav-rings">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M10 3 L10 7 M10 13 L10 17 M3 10 L7 10 M13 10 L17 10" stroke="currentColor" stroke-width="1" opacity="0.5"/></svg>
+                <span>Fraud Rings</span>
+                <span class="nav-badge" id="rings-badge" style="display:none">0</span>
+            </a>
+            <a href="#" class="nav-link" data-page="upload" id="nav-upload">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 13 L3 15 C3 16.1 3.9 17 5 17 L15 17 C16.1 17 17 16.1 17 15 L17 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 3 L10 12 M7 6 L10 3 L13 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Upload Data</span>
+            </a>
+        </div>
+        
+        <div class="sidebar-footer">
+            <div class="engine-status" id="engine-status">
+                <div class="status-dot"></div>
+                <span>Engine Ready</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ─── Main Content ───────────────────────────────────────────────── -->
+    <main id="main-content" class="main-content">
+        
+        <!-- Dashboard Page -->
+        <section id="page-dashboard" class="page active">
+            <div class="page-header">
+                <div>
+                    <h1>Command Center</h1>
+                    <p class="page-desc">Real-time fraud detection intelligence across the eTIMS invoice network</p>
+                </div>
+                <div class="page-actions">
+                    <button class="btn btn-secondary" id="btn-generate-mock">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2 L8 14 M2 8 L14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        Generate Demo Data
+                    </button>
+                    <button class="btn btn-primary" id="btn-run-analysis">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><polygon points="3,2 13,8 3,14" fill="currentColor"/></svg>
+                        Run Detection
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Stat Cards -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card" data-stat="transactions">
+                    <div class="stat-icon" style="--accent: #4cc9f0">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-transactions">—</span>
+                        <span class="stat-label">Transactions</span>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat="companies">
+                    <div class="stat-icon" style="--accent: #7209b7">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="8" width="7" height="12" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="4" width="7" height="16" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-companies">—</span>
+                        <span class="stat-label">Companies</span>
+                    </div>
+                </div>
+                <div class="stat-card alert-card" data-stat="rings">
+                    <div class="stat-icon" style="--accent: #ef476f">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2 L22 20 L2 20 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-rings">—</span>
+                        <span class="stat-label">Fraud Rings</span>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat="fraud-amount">
+                    <div class="stat-icon" style="--accent: #ffd166">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v10M9 9.5c0-1.1 1.3-2 3-2s3 .9 3 2-1.3 2-3 2-3 .9-3 2 1.3 2 3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-fraud-amount">—</span>
+                        <span class="stat-label">Fraud Exposure (KSh)</span>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat="vat">
+                    <div class="stat-icon" style="--accent: #06d6a0">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 20 L9 10 L13 14 L21 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-vat">—</span>
+                        <span class="stat-label">VAT at Risk (KSh)</span>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat="flagged">
+                    <div class="stat-icon" style="--accent: #f72585">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 3 L4 21 M4 5 L14 5 L12 9 L14 13 L4 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-flagged">—</span>
+                        <span class="stat-label">Flagged Entities</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="dashboard-row">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3>Top Risk Companies</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="risk-chart"></canvas>
+                    </div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3>Fraud Ring Distribution</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="ring-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Graph Explorer Page -->
+        <section id="page-graph" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Knowledge Graph Explorer</h1>
+                    <p class="page-desc">Interactive force-directed graph of the eTIMS transaction network</p>
+                </div>
+                <div class="page-actions">
+                    <select id="graph-ring-filter" class="select-input">
+                        <option value="">All Transactions</option>
+                    </select>
+                    <button class="btn btn-secondary" id="btn-reset-graph">Reset View</button>
+                </div>
+            </div>
+            <div class="graph-container">
+                <div class="graph-canvas" id="graph-canvas"></div>
+                <div class="graph-legend">
+                    <div class="legend-title">Legend</div>
+                    <div class="legend-item"><span class="legend-dot" style="background: #06d6a0"></span> Clean Entity</div>
+                    <div class="legend-item"><span class="legend-dot" style="background: #ef476f"></span> Flagged Entity</div>
+                    <div class="legend-item"><span class="legend-line" style="background: rgba(76,201,240,0.4)"></span> Valid Invoice</div>
+                    <div class="legend-line-item"><span class="legend-line" style="background: #ef476f"></span> Flagged Invoice</div>
+                </div>
+                <div class="graph-tooltip" id="graph-tooltip" style="display:none"></div>
+            </div>
+        </section>
+
+        <!-- Fraud Rings Page -->
+        <section id="page-rings" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Detected Fraud Rings</h1>
+                    <p class="page-desc">Circular VAT invoice loops identified by the graph engine</p>
+                </div>
+            </div>
+            <div id="rings-container" class="rings-container">
+                <div class="empty-state" id="rings-empty">
+                    <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                        <circle cx="32" cy="32" r="28" stroke="#4cc9f0" stroke-width="2" stroke-dasharray="6 4" opacity="0.3"/>
+                        <circle cx="32" cy="32" r="14" stroke="#7209b7" stroke-width="2" opacity="0.3"/>
+                        <circle cx="32" cy="32" r="4" fill="#4cc9f0" opacity="0.5"/>
+                    </svg>
+                    <h3>No Fraud Rings Detected</h3>
+                    <p>Upload transaction data and run the detection algorithm to find circular VAT invoice loops.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Upload Page -->
+        <section id="page-upload" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Data Ingestion</h1>
+                    <p class="page-desc">Upload eTIMS transaction data (CSV) for graph analysis</p>
+                </div>
+            </div>
+            <div class="upload-zone-wrapper">
+                <div class="upload-zone" id="upload-zone">
+                    <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                        <path d="M16 40 L16 44 C16 47.3 18.7 50 22 50 L42 50 C45.3 50 48 47.3 48 44 L48 40" stroke="url(#uploadGrad)" stroke-width="3" stroke-linecap="round"/>
+                        <path d="M32 14 L32 36 M24 22 L32 14 L40 22" stroke="url(#uploadGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs><linearGradient id="uploadGrad" x1="16" y1="14" x2="48" y2="50">
+                            <stop offset="0%" stop-color="#4cc9f0"/><stop offset="100%" stop-color="#7209b7"/>
+                        </linearGradient></defs>
+                    </svg>
+                    <h3>Drop CSV file here</h3>
+                    <p>or click to browse • Supports: buyer_pin, seller_pin, invoice_number, amount, vat_amount, invoice_date</p>
+                    <input type="file" id="csv-input" accept=".csv" style="display:none">
+                </div>
+                <div class="upload-result" id="upload-result" style="display:none"></div>
+            </div>
+            
+            <div class="card" style="margin-top: 2rem">
+                <div class="card-header"><h3>Expected CSV Format</h3></div>
+                <div class="card-body">
+                    <div class="code-block">
+                        <code>buyer_pin,seller_pin,invoice_number,amount,vat_amount,invoice_date
+P051234567A,P098765432B,ETIMS-2024-000001,5000000,800000,2025-03-15
+A012345678C,P051234567A,ETIMS-2024-000002,3200000,512000,2025-04-20</code>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ─── Toast Container ────────────────────────────────────────────── -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ─── Ring Detail Modal ──────────────────────────────────────────── -->
+    <div class="modal-overlay" id="ring-modal" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modal-title">Fraud Ring Detail</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- ─── Loading Overlay ────────────────────────────────────────────── -->
+    <div class="loading-overlay" id="loading-overlay" style="display:none">
+        <div class="loader">
+            <div class="loader-ring"></div>
+            <p id="loading-text">Analyzing transaction graph...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/graph-viz.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+@echo off
+echo Starting eTIMS Knowledge Graph Engine (Flask Edition)...
+.\venv\Scripts\python.exe app.py
