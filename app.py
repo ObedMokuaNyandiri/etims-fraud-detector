@@ -8,7 +8,6 @@ from sqlalchemy import select, func, update
 from database import init_db, SessionLocal
 from models import Company, Transaction, FraudRing, AnalysisRun
 from graph_engine import GraphEngine
-from utils.mock_data import generate_mock_data
 from utils.csv_parser import parse_csv
 
 app = Flask(__name__, static_folder='static')
@@ -42,6 +41,14 @@ def upload_csv():
     companies_created = 0
     
     with SessionLocal() as db:
+        # User requested that each new upload completely resets the state
+        if result.records:
+            db.execute(Transaction.__table__.delete())
+            db.execute(Company.__table__.delete())
+            db.execute(FraudRing.__table__.delete())
+            db.execute(AnalysisRun.__table__.delete())
+            db.commit()
+
         existing_pins_query = db.execute(select(Company.pin))
         existing_pins = {row[0] for row in existing_pins_query.fetchall()}
         
@@ -53,13 +60,18 @@ def upload_csv():
                 result.duplicates += 1
                 continue
                 
-            for pin_key in ["buyer_pin", "seller_pin"]:
+            for pin_key, name_key in [("buyer_pin", "buyer_name"), ("seller_pin", "seller_name")]:
                 pin = record[pin_key]
                 if pin not in existing_pins:
-                    company = Company(pin=pin, name=f"Company {pin}", sector="Unknown")
+                    name = record.get(name_key) or f"Company {pin}"
+                    company = Company(pin=pin, name=name, sector="Unknown")
                     db.add(company)
                     existing_pins.add(pin)
                     companies_created += 1
+                    
+            # Remove transient keys not mapped to Transaction model
+            record.pop("buyer_name", None)
+            record.pop("seller_name", None)
                     
             tx = Transaction(**record)
             db.add(tx)
@@ -100,6 +112,7 @@ def _build_graph(db):
             vat_amount=tx.vat_amount,
             transaction_id=tx.id,
             invoice_number=tx.invoice_number,
+            invoice_date=tx.invoice_date,
         )
     return engine
 
@@ -321,65 +334,6 @@ def get_timeline():
             "total_fraud_amount": r.total_fraud_amount,
             "duration_seconds": r.duration_seconds,
         } for r in runs])
-
-# ── Mock Data Generator ─────────────────────────────────────────────────────
-@app.route('/api/mock/generate', methods=['POST'])
-def generate_mock():
-    num_companies = request.args.get('num_companies', 40, type=int)
-    num_transactions = request.args.get('num_transactions', 150, type=int)
-    num_rings = request.args.get('num_rings', 4, type=int)
-    seed = request.args.get('seed', 42, type=int)
-    
-    with SessionLocal() as db:
-        if db.execute(select(Transaction.id).limit(1)).scalar():
-            return jsonify({"detail": "Data already exists. Clear database first."}), 409
-            
-        companies, transactions, rings = generate_mock_data(
-            num_companies=num_companies,
-            num_legitimate_txns=num_transactions,
-            num_fraud_rings=num_rings,
-            seed=seed,
-        )
-        
-        for comp in companies:
-            db.add(Company(pin=comp["pin"], name=comp["name"], sector=comp["sector"]))
-        db.flush()
-        
-        from datetime import datetime
-        for tx in transactions:
-            inv_date = tx["invoice_date"]
-            if isinstance(inv_date, str):
-                inv_date = datetime.strptime(inv_date, "%Y-%m-%d").date()
-                
-            db.add(Transaction(
-                buyer_pin=tx["buyer_pin"],
-                seller_pin=tx["seller_pin"],
-                invoice_number=tx["invoice_number"],
-                amount=tx["amount"],
-                vat_amount=tx["vat_amount"],
-                invoice_date=inv_date,
-            ))
-        db.commit()
-        
-        for comp in companies:
-            pin = comp["pin"]
-            buy_count = db.execute(select(func.count()).where(Transaction.buyer_pin == pin)).scalar()
-            sell_count = db.execute(select(func.count()).where(Transaction.seller_pin == pin)).scalar()
-            vat_total = db.execute(select(func.coalesce(func.sum(Transaction.vat_amount), 0)).where(Transaction.buyer_pin == pin)).scalar()
-            
-            db.execute(
-                update(Company)
-                .where(Company.pin == pin)
-                .values(transaction_count=buy_count+sell_count, total_vat_claimed=vat_total)
-            )
-        db.commit()
-        
-    return jsonify({
-        "message": "Mock data generated successfully",
-        "companies_created": len(companies),
-        "transactions_created": len(transactions),
-        "fraud_rings_embedded": len(rings),
-    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)

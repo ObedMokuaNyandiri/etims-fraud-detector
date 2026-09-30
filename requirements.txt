@@ -1,4 +1,5 @@
 Flask==3.0.3
+Flask-CORS==4.0.0
 SQLAlchemy==2.0.35
 networkx==3.3
 gunicorn==21.2.0

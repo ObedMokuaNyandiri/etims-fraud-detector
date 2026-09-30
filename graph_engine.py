@@ -26,6 +26,7 @@ class DetectedRing:
     transaction_ids: list[int] = field(default_factory=list)
     confidence: float = 0.0
     ring_hash: str = ""
+    kra_vat_exposure: float = 0.0
 
     def compute_hash(self) -> str:
         """Deterministic fingerprint so we don't re-detect the same ring."""
@@ -64,6 +65,7 @@ class GraphEngine:
         vat_amount: float,
         transaction_id: int,
         invoice_number: str = "",
+        invoice_date: str | None = None,
     ):
         """Add a directed edge: seller → buyer (money flows buyer→seller, invoice flows seller→buyer)."""
         # In VAT fraud, the invoice chain matters: seller issues invoice TO buyer.
@@ -82,6 +84,7 @@ class GraphEngine:
             "vat": vat_amount,
             "tx_id": transaction_id,
             "invoice": invoice_number,
+            "date": str(invoice_date) if invoice_date else "",
         })
 
         # Aggregate edge weight = total amount across all invoices between this pair
@@ -132,6 +135,7 @@ class GraphEngine:
             for src, dst in edges:
                 edge_key = (src, dst)
                 if edge_key in self._edge_data:
+                    # Aggregate split invoices
                     for tx in self._edge_data[edge_key]:
                         total_amount += tx["amount"]
                         total_vat += tx["vat"]
@@ -146,6 +150,7 @@ class GraphEngine:
                 total_amount=total_amount,
                 total_vat=total_vat,
                 transaction_ids=tx_ids,
+                kra_vat_exposure=total_vat,  # Total VAT circulating in the scheme
             )
             ring.compute_hash()
 
@@ -167,33 +172,60 @@ class GraphEngine:
         Heuristic confidence score for a detected ring.
         Factors:
           - Cycle tightness (shorter = more suspicious)
-          - Amount consistency (similar amounts across edges = more suspicious)
-          - Entity repetition across edges
+          - Amount consistency & Margin Decay (amounts dropping slightly per hop to mimic margins)
+          - Temporal Sequencing (invoices chronologically flowing across the hops)
         """
         score = 0.0
 
-        # 1. Cycle length penalty: 3-node rings are most suspicious
+        # 1. Cycle length penalty: 3-node rings are most suspicious, 2-nodes are benign reciprocal trade and are ignored
         length_scores = {3: 0.95, 4: 0.85, 5: 0.70, 6: 0.55, 7: 0.40, 8: 0.30}
         score += length_scores.get(len(ring.members), 0.20)
 
-        # 2. Amount consistency: if all edges have similar amounts, likely fictitious
+        # 2. Amount analysis: Margin Decay vs Consistency
         edge_amounts = []
+        edge_dates = []
         for src, dst in ring.edges:
             edge_key = (src, dst)
             if edge_key in self._edge_data:
-                avg = sum(tx["amount"] for tx in self._edge_data[edge_key]) / len(
-                    self._edge_data[edge_key]
-                )
-                edge_amounts.append(avg)
+                # Aggregate split invoices on this hop
+                agg_amt = sum(tx["amount"] for tx in self._edge_data[edge_key])
+                edge_amounts.append(agg_amt)
+                
+                # Get the earliest invoice date for this hop
+                valid_dates = [tx["date"] for tx in self._edge_data[edge_key] if tx["date"]]
+                if valid_dates:
+                    edge_dates.append(min(valid_dates))
 
-        if edge_amounts and len(edge_amounts) > 1:
-            mean_amt = sum(edge_amounts) / len(edge_amounts)
+        if len(edge_amounts) > 1:
+            # Rotate amounts so the highest amount is first (logical start of the scheme)
+            max_idx = edge_amounts.index(max(edge_amounts))
+            rotated_amounts = edge_amounts[max_idx:] + edge_amounts[:max_idx]
+
+            mean_amt = sum(rotated_amounts) / len(rotated_amounts)
             if mean_amt > 0:
-                variance = sum((a - mean_amt) ** 2 for a in edge_amounts) / len(edge_amounts)
-                cv = (variance ** 0.5) / mean_amt  # Coefficient of variation
-                # Low CV = suspiciously consistent = higher confidence
-                consistency_bonus = max(0, 0.3 - cv * 0.5)
-                score += consistency_bonus
+                variance = sum((a - mean_amt) ** 2 for a in rotated_amounts) / len(rotated_amounts)
+                cv = (variance ** 0.5) / mean_amt
+                
+                # Check for Margin Decay (amounts consistently decreasing)
+                is_decaying = all(rotated_amounts[i] >= rotated_amounts[i+1] * 0.9 for i in range(len(rotated_amounts)-1))
+                
+                if is_decaying and cv > 0.01:
+                    score += 0.4  # High bonus for realistic margin decay
+                else:
+                    # Low CV = suspiciously consistent = higher confidence
+                    consistency_bonus = max(0, 0.3 - cv * 0.5)
+                    score += consistency_bonus
+
+        # 3. Temporal Sequencing
+        if len(edge_dates) == len(ring.edges):
+            # Rotate dates so the earliest date is first
+            min_idx = edge_dates.index(min(edge_dates))
+            rotated_dates = edge_dates[min_idx:] + edge_dates[:min_idx]
+
+            # Check if dates are chronologically increasing
+            is_temporal = all(rotated_dates[i] <= rotated_dates[i+1] for i in range(len(rotated_dates)-1))
+            if is_temporal:
+                score += 0.3  # Huge bonus for sequenced circular flow
 
         return min(score, 1.0)
 

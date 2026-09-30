@@ -34,10 +34,13 @@ class Transaction(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     buyer_pin: Mapped[str] = mapped_column(String(20))
     seller_pin: Mapped[str] = mapped_column(String(20))
-    invoice_number: Mapped[str] = mapped_column(String(50), unique=True)
+    invoice_number: Mapped[str] = mapped_column(String(100), unique=True)
     amount: Mapped[float] = mapped_column(Float)
     vat_amount: Mapped[float] = mapped_column(Float)
+    taxable_value: Mapped[float] = mapped_column(Float, nullable=True)
     invoice_date: Mapped[datetime.date] = mapped_column(Date)
+    hs_code: Mapped[str] = mapped_column(String(50), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="VALID")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow

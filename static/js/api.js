@@ -46,5 +46,4 @@ const API = {
     getFraudRings()      { return this.get('/api/analysis/rings'); },
     getFraudRing(id)     { return this.get(`/api/analysis/rings/${id}`); },
     runDetection(params) { return this.post('/api/analysis/detect', params || {}); },
-    generateMock(params) { return this.post(`/api/mock/generate?num_companies=${params?.companies||40}&num_transactions=${params?.transactions||150}&num_rings=${params?.rings||4}&seed=${params?.seed||42}`); },
 };

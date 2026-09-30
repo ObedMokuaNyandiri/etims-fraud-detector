@@ -67,21 +67,6 @@
         document.getElementById('loading-overlay').style.display = 'none';
     }
 
-    // ── Generate Mock Data ──────────────────────────────────────────────────
-    document.getElementById('btn-generate-mock').addEventListener('click', async () => {
-        try {
-            showLoading('Generating realistic eTIMS transaction data with embedded fraud rings...');
-            const result = await API.generateMock({ companies: 40, transactions: 150, rings: 4, seed: 42 });
-            hideLoading();
-            toast(`Generated ${result.transactions_created} transactions across ${result.companies_created} companies with ${result.fraud_rings_embedded} embedded fraud rings`, 'success');
-            dashboard.loadStats();
-            dashboard.loadCharts();
-        } catch (err) {
-            hideLoading();
-            toast(err.message, 'error');
-        }
-    });
-
     // ── Run Detection ───────────────────────────────────────────────────────
     document.getElementById('btn-run-analysis').addEventListener('click', async () => {
         try {
@@ -311,6 +296,11 @@
 
             toast(`Imported ${result.transactions_imported} transactions from ${file.name}`, 'success');
             dashboard.loadStats();
+
+            // Automatically trigger analysis if any transactions exist in the graph
+            if (result.transactions_imported > 0 || result.duplicates_skipped > 0) {
+                document.getElementById('btn-run-analysis').click();
+            }
         } catch (err) {
             hideLoading();
             uploadResult.style.display = 'block';
