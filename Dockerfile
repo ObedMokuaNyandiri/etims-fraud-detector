@@ -33,5 +33,5 @@ USER etims
 # Expose the application port
 EXPOSE 8000
 
-# Run the application with Gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "app:app"]
+# Run the application with Gunicorn, listening on the PORT env variable (required by Railway/Render)
+CMD sh -c "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 4 app:app"
